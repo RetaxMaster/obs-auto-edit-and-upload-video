@@ -227,36 +227,21 @@ QPushButton *inject_record_button(QWidget *main_window)
 {
     if (!main_window) return nullptr;
 
-    // Log all QPushButtons so we can diagnose name mismatches across OBS versions
-    auto all_buttons = main_window->findChildren<QPushButton *>();
-    obs_log(LOG_INFO, "[RizzyTos] Scanning main window — found %d QPushButton(s):",
-            (int)all_buttons.size());
-    for (auto *b : all_buttons) {
-        obs_log(LOG_INFO, "[RizzyTos]   name='%s'  text='%s'",
-                b->objectName().toUtf8().constData(),
-                b->text().toUtf8().constData());
-    }
-
-    // Exact match first, then fuzzy (contains "record", case-insensitive)
+    // Exact match first, then fuzzy fallback (contains "record", case-insensitive)
     QPushButton *record_btn =
         main_window->findChild<QPushButton *>("recordButton");
     if (!record_btn) {
-        obs_log(LOG_WARNING,
-                "[RizzyTos] 'recordButton' not found — trying fuzzy name match...");
+        auto all_buttons = main_window->findChildren<QPushButton *>();
         for (auto *b : all_buttons) {
             if (b->objectName().contains("record", Qt::CaseInsensitive)) {
                 record_btn = b;
-                obs_log(LOG_INFO,
-                        "[RizzyTos] Fuzzy match: using button name='%s' text='%s'",
-                        b->objectName().toUtf8().constData(),
-                        b->text().toUtf8().constData());
                 break;
             }
         }
     }
     if (!record_btn) {
         obs_log(LOG_WARNING,
-                "[RizzyTos] No record button found in OBS main window — "
+                "Could not find record button in OBS main window — "
                 "injection skipped. Use the button in the RizzyTos dock instead.");
         return nullptr;
     }

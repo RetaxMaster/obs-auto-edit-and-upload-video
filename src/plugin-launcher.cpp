@@ -53,8 +53,16 @@ bool PluginLauncher::launch(const std::string    &input_path,
     std::string worker = find_worker_binary();
     std::string ffmpeg = find_ffmpeg_binary();
 
+    obs_log(LOG_INFO, "worker path: %s", worker.c_str());
+    obs_log(LOG_INFO, "ffmpeg path: %s", ffmpeg.c_str());
+
     if (worker.empty()) {
         obs_log(LOG_WARNING, "rizzytos-worker binary not found");
+        return false;
+    }
+
+    if (!QFileInfo::exists(QString::fromStdString(worker))) {
+        obs_log(LOG_WARNING, "rizzytos-worker not found at: %s", worker.c_str());
         return false;
     }
 
