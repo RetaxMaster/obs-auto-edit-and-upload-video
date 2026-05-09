@@ -33,13 +33,13 @@
     },
     "platformConfig": {
         "macos": {
-            "bundleId": "com.example.plugintemplate-for-obs"
+            "bundleId": "com.retaxmaster.rizzytos-auto-edit"
         }
     },
-    "name": "plugintemplate-for-obs",
-    "displayName": "Plugin Template for OBS",
+    "name": "rizzytos-auto-edit",
+    "displayName": "RizzyTos Auto Edit",
     "version": "1.0.0",
-    "author": "Your Name Here",
-    "website": "https://example.com",
-    "email": "me@example.com"
+    "author": "RetaxMaster",
+    "website": "https://retaxmaster.com",
+    "email": "carlos@retaxmaster.com"
 }
