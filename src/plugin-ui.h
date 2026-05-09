@@ -22,8 +22,12 @@ public:
                         const std::string &output_path);
     void stop_progress();
 
+    // Sync the in-dock action button state (mirrors the injected controls button).
+    void set_action_button_state(bool recording, bool enabled);
+
 signals:
     void settings_changed(const PluginSettings &s);
+    void record_requested();
 
 private slots:
     void browse_output_dir();
@@ -32,6 +36,7 @@ private slots:
     void on_poll_timer();
 
 private:
+    QPushButton  *action_btn_       = nullptr;
     QLineEdit    *output_dir_edit_  = nullptr;
     QLineEdit    *output_name_edit_ = nullptr;
     QLineEdit    *intro_edit_       = nullptr;

@@ -44,22 +44,26 @@ static QPointer<QPushButton>  g_button;
 
 static void set_button_idle()
 {
-    if (!g_button) return;
-    g_button->setText(obs_module_text("RizzyTos.Button.Record"));
-    g_button->setEnabled(true);
+    if (g_button) {
+        g_button->setText(obs_module_text("RizzyTos.Button.Record"));
+        g_button->setEnabled(true);
+    }
+    if (g_dock) g_dock->set_action_button_state(false, true);
 }
 
 static void set_button_recording()
 {
-    if (!g_button) return;
-    g_button->setText(obs_module_text("RizzyTos.Button.Stop"));
-    g_button->setEnabled(true);
+    if (g_button) {
+        g_button->setText(obs_module_text("RizzyTos.Button.Stop"));
+        g_button->setEnabled(true);
+    }
+    if (g_dock) g_dock->set_action_button_state(true, true);
 }
 
 static void set_button_processing()
 {
-    if (!g_button) return;
-    g_button->setEnabled(false);
+    if (g_button) g_button->setEnabled(false);
+    if (g_dock) g_dock->set_action_button_state(false, false);
 }
 
 static void on_button_clicked()
@@ -124,6 +128,8 @@ static void obs_event_cb(enum obs_frontend_event event, void * /*private_data*/)
         g_dock->set_settings(g_settings);
         QObject::connect(g_dock, &AutoEditDock::settings_changed,
                          on_dock_settings_changed);
+        QObject::connect(g_dock, &AutoEditDock::record_requested,
+                         on_button_clicked);
 
         obs_frontend_add_dock_by_id("rizzytos_auto_edit_dock",
                                     obs_module_text("RizzyTos.Dock.Title"),

@@ -17,6 +17,19 @@ AutoEditDock::AutoEditDock(QWidget *parent) : QWidget(parent)
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(6);
 
+    // Action button — always present in the dock panel
+    action_btn_ = new QPushButton(obs_module_text("RizzyTos.Button.Record"), this);
+    layout->addWidget(action_btn_);
+    connect(action_btn_, &QPushButton::clicked, this, &AutoEditDock::record_requested);
+
+    // Separator between action button and settings
+    {
+        auto *sep = new QFrame(this);
+        sep->setFrameShape(QFrame::HLine);
+        sep->setFrameShadow(QFrame::Sunken);
+        layout->addWidget(sep);
+    }
+
     // Helper: build a label + line-edit + browse-button row
     auto make_browse_row = [&](const char *label_key,
                                 QLineEdit *&edit,
@@ -118,6 +131,15 @@ void AutoEditDock::stop_progress()
     progress_bar_->hide();
 }
 
+void AutoEditDock::set_action_button_state(bool recording, bool enabled)
+{
+    if (!action_btn_) return;
+    action_btn_->setText(recording
+        ? obs_module_text("RizzyTos.Button.Stop")
+        : obs_module_text("RizzyTos.Button.Record"));
+    action_btn_->setEnabled(enabled);
+}
+
 void AutoEditDock::on_poll_timer()
 {
     std::ifstream f(progress_file_);
@@ -205,12 +227,37 @@ QPushButton *inject_record_button(QWidget *main_window)
 {
     if (!main_window) return nullptr;
 
+    // Log all QPushButtons so we can diagnose name mismatches across OBS versions
+    auto all_buttons = main_window->findChildren<QPushButton *>();
+    obs_log(LOG_INFO, "[RizzyTos] Scanning main window — found %d QPushButton(s):",
+            (int)all_buttons.size());
+    for (auto *b : all_buttons) {
+        obs_log(LOG_INFO, "[RizzyTos]   name='%s'  text='%s'",
+                b->objectName().toUtf8().constData(),
+                b->text().toUtf8().constData());
+    }
+
+    // Exact match first, then fuzzy (contains "record", case-insensitive)
     QPushButton *record_btn =
         main_window->findChild<QPushButton *>("recordButton");
     if (!record_btn) {
         obs_log(LOG_WARNING,
-                "Could not find recordButton in OBS main window — "
-                "button injection skipped");
+                "[RizzyTos] 'recordButton' not found — trying fuzzy name match...");
+        for (auto *b : all_buttons) {
+            if (b->objectName().contains("record", Qt::CaseInsensitive)) {
+                record_btn = b;
+                obs_log(LOG_INFO,
+                        "[RizzyTos] Fuzzy match: using button name='%s' text='%s'",
+                        b->objectName().toUtf8().constData(),
+                        b->text().toUtf8().constData());
+                break;
+            }
+        }
+    }
+    if (!record_btn) {
+        obs_log(LOG_WARNING,
+                "[RizzyTos] No record button found in OBS main window — "
+                "injection skipped. Use the button in the RizzyTos dock instead.");
         return nullptr;
     }
 
