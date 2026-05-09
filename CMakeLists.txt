@@ -4,36 +4,102 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/common/bootstrap.cmake" NO_POLICY_SCO
 
 project(${_name} VERSION ${_version})
 
-option(ENABLE_FRONTEND_API "Use obs-frontend-api for UI functionality" OFF)
-option(ENABLE_QT "Use Qt functionality" OFF)
+option(ENABLE_FRONTEND_API "Use obs-frontend-api for UI functionality" ON)
+option(ENABLE_QT "Use Qt functionality" ON)
+option(BUILD_TESTING "Build unit tests for the worker" ON)
+option(WORKER_ONLY "Build only the worker and tests (no OBS/Qt required)" OFF)
 
-include(compilerconfig)
-include(defaults)
-include(helpers)
+if(NOT WORKER_ONLY)
+  include(compilerconfig)
+  include(defaults)
+  include(helpers)
 
-add_library(${CMAKE_PROJECT_NAME} MODULE)
+  # ── Plugin shared library ──────────────────────────────────────────────────
 
-find_package(libobs REQUIRED)
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs)
+  add_library(${CMAKE_PROJECT_NAME} MODULE)
 
-if(ENABLE_FRONTEND_API)
-  find_package(obs-frontend-api REQUIRED)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::obs-frontend-api)
+  find_package(libobs REQUIRED)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs)
+
+  if(ENABLE_FRONTEND_API)
+    find_package(obs-frontend-api REQUIRED)
+    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::obs-frontend-api)
+  endif()
+
+  if(ENABLE_QT)
+    find_package(Qt6 COMPONENTS Widgets Core)
+    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets)
+    target_compile_options(
+      ${CMAKE_PROJECT_NAME}
+      PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang>:-Wno-quoted-include-in-framework-header -Wno-comma>
+    )
+    set_target_properties(
+      ${CMAKE_PROJECT_NAME}
+      PROPERTIES AUTOMOC ON AUTOUIC ON AUTORCC ON
+    )
+  endif()
+
+  target_sources(
+    ${CMAKE_PROJECT_NAME}
+    PRIVATE
+      src/plugin-main.cpp
+      src/plugin-settings.cpp
+      src/plugin-recorder.cpp
+      src/plugin-launcher.cpp
+      src/plugin-ui.cpp
+  )
+
+  target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE src)
+
+  set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
 endif()
 
-if(ENABLE_QT)
-  find_package(Qt6 COMPONENTS Widgets Core)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets)
-  target_compile_options(
-    ${CMAKE_PROJECT_NAME}
-    PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang>:-Wno-quoted-include-in-framework-header -Wno-comma>
-  )
-  set_target_properties(
-    ${CMAKE_PROJECT_NAME}
-    PROPERTIES AUTOMOC ON AUTOUIC ON AUTORCC ON
+# ── Worker standalone executable ─────────────────────────────────────────────
+
+add_executable(rizzytos-worker
+  worker/main.cpp
+  worker/args.cpp
+  worker/concat.cpp
+  worker/progress.cpp
+)
+
+target_include_directories(rizzytos-worker PRIVATE worker)
+set_property(TARGET rizzytos-worker PROPERTY CXX_STANDARD 17)
+
+if(NOT WORKER_ONLY)
+  install(TARGETS rizzytos-worker
+    RUNTIME DESTINATION "${CMAKE_PROJECT_NAME}/bin/64bit"
+    BUNDLE  DESTINATION "."
   )
 endif()
 
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.c)
+# ── Worker unit tests ─────────────────────────────────────────────────────────
 
-set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
+if(BUILD_TESTING)
+  enable_testing()
+
+  add_executable(test_worker_args
+    tests/worker/test_args.cpp
+    worker/args.cpp
+  )
+  target_include_directories(test_worker_args PRIVATE worker)
+  set_property(TARGET test_worker_args PROPERTY CXX_STANDARD 17)
+  add_test(NAME worker_args COMMAND test_worker_args)
+
+  add_executable(test_worker_progress
+    tests/worker/test_progress.cpp
+    worker/progress.cpp
+  )
+  target_include_directories(test_worker_progress PRIVATE worker)
+  set_property(TARGET test_worker_progress PROPERTY CXX_STANDARD 17)
+  add_test(NAME worker_progress COMMAND test_worker_progress)
+
+  add_executable(test_worker_concat
+    tests/worker/test_concat.cpp
+    worker/concat.cpp
+    worker/progress.cpp
+  )
+  target_include_directories(test_worker_concat PRIVATE worker)
+  set_property(TARGET test_worker_concat PROPERTY CXX_STANDARD 17)
+  add_test(NAME worker_concat COMMAND test_worker_concat)
+endif()
