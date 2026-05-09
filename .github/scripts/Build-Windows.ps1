@@ -79,6 +79,18 @@ function Build {
     Log-Group "Installing ${ProductName}..."
     Invoke-External cmake @CmakeInstallArgs
 
+    Log-Group "Downloading bundled FFmpeg..."
+    $FfmpegUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+    $FfmpegZip = "${env:TEMP}\ffmpeg.zip"
+    $FfmpegExtract = "${env:TEMP}\ffmpeg_extract"
+
+    Invoke-WebRequest -Uri $FfmpegUrl -OutFile $FfmpegZip -UseBasicParsing
+    Expand-Archive -Path $FfmpegZip -DestinationPath $FfmpegExtract -Force
+    $FfmpegExe = Get-ChildItem -Path $FfmpegExtract -Recurse -Filter "ffmpeg.exe" |
+                 Select-Object -First 1
+    Copy-Item $FfmpegExe.FullName "${ProjectRoot}/data/ffmpeg.exe" -Force
+    Log-Group
+
     Pop-Location -Stack BuildTemp
     Log-Group
 }

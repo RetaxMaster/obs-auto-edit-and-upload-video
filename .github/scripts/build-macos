@@ -146,6 +146,26 @@ build() {
   log_group "Installing ${product_name}..."
   cmake --install build_macos --config ${config} --prefix "${project_root}/release/${config}"
 
+  log_group "Downloading bundled FFmpeg (universal)..."
+  local ffmpeg_zip="/tmp/ffmpeg_macos.zip"
+  # evermeet.cx provides arm64; for universal we fetch both and combine with lipo
+  local ffmpeg_arm64_zip="/tmp/ffmpeg_arm64.zip"
+  local ffmpeg_x64_zip="/tmp/ffmpeg_x64.zip"
+
+  curl -L -o "${ffmpeg_arm64_zip}" "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip"
+  curl -L -o "${ffmpeg_x64_zip}"  "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip/x86_64"
+
+  unzip -o "${ffmpeg_arm64_zip}" -d /tmp/ffmpeg_arm64/
+  unzip -o "${ffmpeg_x64_zip}"   -d /tmp/ffmpeg_x64/
+
+  lipo -create \
+    /tmp/ffmpeg_arm64/ffmpeg \
+    /tmp/ffmpeg_x64/ffmpeg \
+    -output "${project_root}/data/ffmpeg"
+
+  chmod +x "${project_root}/data/ffmpeg"
+  log_group
+
   popd
   log_group
 }
