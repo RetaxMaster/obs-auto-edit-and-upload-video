@@ -48,6 +48,10 @@ if(NOT WORKER_ONLY)
     set(BUILD_WITH_QT6 ON CACHE BOOL "" FORCE)
     set(QTKEYCHAIN_STATIC ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(qtkeychain)
+    # qtkeychain sets no BUILD_INTERFACE include dirs, so add them manually:
+    # source root for keychain.h, binary dir for the generated qkeychain_export.h
+    FetchContent_GetProperties(qtkeychain SOURCE_DIR _qtkc_src BINARY_DIR _qtkc_bin)
+    target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE "${_qtkc_src}" "${_qtkc_bin}")
     target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE qt6keychain)
   endif()
 
