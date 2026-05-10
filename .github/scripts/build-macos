@@ -152,8 +152,8 @@ build() {
   local ffmpeg_arm64_zip="/tmp/ffmpeg_arm64.zip"
   local ffmpeg_x64_zip="/tmp/ffmpeg_x64.zip"
 
-  curl -L -o "${ffmpeg_arm64_zip}" "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip"
-  curl -L -o "${ffmpeg_x64_zip}"  "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip/x86_64"
+  curl -fL -o "${ffmpeg_arm64_zip}" "https://www.osxexperts.net/ffmpeg80arm.zip"
+  curl -fL -o "${ffmpeg_x64_zip}"  "https://www.osxexperts.net/ffmpeg80intel.zip"
 
   unzip -o "${ffmpeg_arm64_zip}" -d /tmp/ffmpeg_arm64/
   unzip -o "${ffmpeg_x64_zip}"   -d /tmp/ffmpeg_x64/
