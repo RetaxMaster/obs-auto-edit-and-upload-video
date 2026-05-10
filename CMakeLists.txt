@@ -68,8 +68,7 @@ set_property(TARGET rizzytos-worker PROPERTY CXX_STANDARD 17)
 
 if(NOT WORKER_ONLY)
   install(TARGETS rizzytos-worker
-    RUNTIME DESTINATION "${CMAKE_PROJECT_NAME}/bin/64bit"
-    BUNDLE  DESTINATION "."
+    RUNTIME DESTINATION "data/obs-plugins/${CMAKE_PROJECT_NAME}"
   )
 endif()
 

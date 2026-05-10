@@ -10,16 +10,14 @@
 
 std::string PluginLauncher::find_worker_binary() const
 {
-    const char *bin_path = obs_get_module_binary_path(obs_current_module());
-    if (!bin_path) return "";
+    const char *data_path = obs_get_module_data_path(obs_current_module());
+    if (!data_path) return "";
 
-    QFileInfo plugin_file(QString::fromUtf8(bin_path));
-    QDir bin_dir = plugin_file.absoluteDir();
-
+    QDir data_dir(QString::fromUtf8(data_path));
 #ifdef _WIN32
-    return bin_dir.filePath("rizzytos-worker.exe").toStdString();
+    return data_dir.filePath("rizzytos-worker.exe").toStdString();
 #else
-    return bin_dir.filePath("rizzytos-worker").toStdString();
+    return data_dir.filePath("rizzytos-worker").toStdString();
 #endif
 }
 
