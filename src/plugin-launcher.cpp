@@ -48,11 +48,11 @@ bool PluginLauncher::launch(const std::string    &input_path,
     QString uuid = QUuid::createUuid().toString(QUuid::Id128).left(8);
     progress_path_ = (QDir::tempPath() + "/rizzytos_" + uuid + ".txt").toStdString();
 
-    // Build output path: dir/expanded_name.ext
+    // Build output path: dir/expanded_name.ext (extension from selected format, not recording)
     std::string expanded_name = recorder_expand_template(settings.output_name_template);
     output_path_ = settings.output_dir
                  + "/" + expanded_name
-                 + "." + encoder_info.ext;
+                 + "." + settings.output_format;
 
     std::string worker = find_worker_binary();
     std::string ffmpeg = find_ffmpeg_binary();
@@ -78,6 +78,17 @@ bool PluginLauncher::launch(const std::string    &input_path,
          << "--encoder"  << QString::fromStdString(encoder_info.encoder)
          << "--bitrate"  << QString::number(encoder_info.bitrate_kbps)
          << "--progress" << QString::fromStdString(progress_path_);
+
+    // Resolve resolution string to pixel dimensions
+    int out_w = 1920, out_h = 1080;
+    if      (settings.output_resolution == "720p")  { out_w = 1280; out_h =  720; }
+    else if (settings.output_resolution == "1080p") { out_w = 1920; out_h = 1080; }
+    else if (settings.output_resolution == "2k")    { out_w = 2560; out_h = 1440; }
+    else if (settings.output_resolution == "4k")    { out_w = 3840; out_h = 2160; }
+
+    args << "--width"  << QString::number(out_w)
+         << "--height" << QString::number(out_h)
+         << "--format" << QString::fromStdString(settings.output_format);
 
     if (!settings.intro_path.empty())
         args << "--intro" << QString::fromStdString(settings.intro_path);

@@ -41,19 +41,34 @@ std::vector<std::string> build_ffmpeg_args(const FfmpegSpec &spec)
     }
 
     int n = static_cast<int>(inputs.size());
+    bool do_scale = (spec.out_width > 0 && spec.out_height > 0);
 
     if (n > 1) {
         std::ostringstream filter;
+
+        if (do_scale) {
+            for (int i = 0; i < n; i++)
+                filter << "[" << i << ":v]scale=" << spec.out_width << ":"
+                       << spec.out_height << ",setsar=1[v_" << i << "];";
+        }
+
+        auto vref = [&](int i) -> std::string {
+            return do_scale ? ("[v_" + std::to_string(i) + "]")
+                            : ("[" + std::to_string(i) + ":v]");
+        };
+
         for (int i = 0; i < n; i++)
-            filter << "[" << i << ":v][" << i << ":a]";
+            filter << vref(i) << "[" << i << ":a]";
         filter << "concat=n=" << n << ":v=1:a=1[v][a]";
 
         args.push_back("-filter_complex");
         args.push_back(filter.str());
-        args.push_back("-map");
-        args.push_back("[v]");
-        args.push_back("-map");
-        args.push_back("[a]");
+        args.push_back("-map"); args.push_back("[v]");
+        args.push_back("-map"); args.push_back("[a]");
+    } else if (do_scale) {
+        args.push_back("-vf");
+        args.push_back("scale=" + std::to_string(spec.out_width) + ":" +
+                        std::to_string(spec.out_height) + ",setsar=1");
     }
 
     args.push_back("-c:v");
@@ -64,8 +79,13 @@ std::vector<std::string> build_ffmpeg_args(const FfmpegSpec &spec)
     args.push_back("pipe:1");
     args.push_back("-nostats");
     args.push_back("-y");
-    args.push_back(spec.output);
 
+    if (!spec.out_format.empty()) {
+        args.push_back("-f");
+        args.push_back(spec.out_format == "mkv" ? "matroska" : spec.out_format);
+    }
+
+    args.push_back(spec.output);
     return args;
 }
 
@@ -161,30 +181,27 @@ int run_ffmpeg(const FfmpegSpec &spec, const std::string &progress_path)
         if (!fi.has_audio) all_audio = false;
     }
 
-    // Determine target resolution from the recording input; fall back to first
-    // input with known dimensions.
-    int target_w = 0, target_h = 0;
-    for (int i = 0; i < n; i++) {
-        if (inputs[i] == spec.input && infos[i].width > 0) {
-            target_w = infos[i].width;
-            target_h = infos[i].height;
-            break;
-        }
-    }
+    // Use user-specified output resolution; fall back to recording's detected
+    // resolution if not specified (backward-compat for callers that don't set out_width).
+    int target_w = spec.out_width;
+    int target_h = spec.out_height;
     if (target_w == 0) {
-        for (const auto &fi : infos) {
-            if (fi.width > 0) { target_w = fi.width; target_h = fi.height; break; }
-        }
-    }
-    bool need_scale = false;
-    if (target_w > 0) {
-        for (const auto &fi : infos) {
-            if (fi.width > 0 && (fi.width != target_w || fi.height != target_h)) {
-                need_scale = true;
+        for (int i = 0; i < n; i++) {
+            if (inputs[i] == spec.input && infos[i].width > 0) {
+                target_w = infos[i].width;
+                target_h = infos[i].height;
                 break;
             }
         }
+        if (target_w == 0) {
+            for (const auto &fi : infos) {
+                if (fi.width > 0) { target_w = fi.width; target_h = fi.height; break; }
+            }
+        }
     }
+    // When a target resolution is set, always scale all inputs so mixed-format
+    // inputs (e.g. MP4 intro + MKV recording) are brought to the same dimensions.
+    bool need_scale = (target_w > 0);
 
     // Build ffmpeg argument list with audio-aware filtergraph
     std::vector<std::string> args;
@@ -269,6 +286,12 @@ int run_ffmpeg(const FfmpegSpec &spec, const std::string &progress_path)
     args.push_back("pipe:1");
     args.push_back("-nostats");
     args.push_back("-y");
+
+    if (!spec.out_format.empty()) {
+        args.push_back("-f");
+        args.push_back(spec.out_format == "mkv" ? "matroska" : spec.out_format);
+    }
+
     args.push_back(spec.output);
 
     // Build shell command
