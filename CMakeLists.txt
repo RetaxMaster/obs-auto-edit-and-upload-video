@@ -46,11 +46,7 @@ if(NOT WORKER_ONLY)
     )
 
     # qtkeychain — cross-platform secure token storage
-    FetchContent_Declare(
-      qtkeychain
-      GIT_REPOSITORY https://github.com/frankosterfeld/qtkeychain.git
-      GIT_TAG 0.14.3
-    )
+    FetchContent_Declare(qtkeychain GIT_REPOSITORY https://github.com/frankosterfeld/qtkeychain.git GIT_TAG 0.14.3)
 
     set(_rizzytos_build_testing "${BUILD_TESTING}")
     set(BUILD_TRANSLATIONS OFF CACHE BOOL "Disable QtKeychain translations" FORCE)
@@ -71,6 +67,9 @@ if(NOT WORKER_ONLY)
     if(APPLE)
       set_target_properties(qt6keychain PROPERTIES XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC NO)
     endif()
+
+    set_target_properties(qt6keychain PROPERTIES COMPILE_WARNING_AS_ERROR OFF)
+    target_compile_options(qt6keychain PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-error=cast-function-type>)
 
     # qtkeychain sets no BUILD_INTERFACE include dirs, so add them manually:
     # source root for keychain.h, binary dir for the generated qkeychain_export.h
@@ -120,6 +119,7 @@ target_include_directories(rizzytos-worker PRIVATE worker)
 set_property(TARGET rizzytos-worker PROPERTY CXX_STANDARD 17)
 
 if(NOT WORKER_ONLY)
+  add_dependencies(${CMAKE_PROJECT_NAME} rizzytos-worker)
   install(TARGETS rizzytos-worker RUNTIME DESTINATION "data/obs-plugins/${CMAKE_PROJECT_NAME}")
 endif()
 
