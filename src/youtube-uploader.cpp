@@ -1,3 +1,5 @@
+// Prevent windows.h (pulled in by curl) from defining min/max macros
+#define NOMINMAX
 #include "youtube-uploader.h"
 #include <obs-module.h>
 #include <plugin-support.h>
