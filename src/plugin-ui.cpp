@@ -4,6 +4,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QMainWindow>
 #include <QSizePolicy>
 #include <fstream>
@@ -105,10 +106,27 @@ PluginSettings AutoEditDock::get_settings() const
 
 void AutoEditDock::set_settings(const PluginSettings &s)
 {
-    output_dir_edit_->setText(QString::fromStdString(s.output_dir));
     output_name_edit_->setText(QString::fromStdString(s.output_name_template));
-    intro_edit_->setText(QString::fromStdString(s.intro_path));
-    outro_edit_->setText(QString::fromStdString(s.outro_path));
+
+    auto apply_path = [](QLineEdit *edit, const std::string &path) -> bool {
+        QString qpath = QString::fromStdString(path);
+        if (!qpath.isEmpty() && !QFileInfo::exists(qpath)) {
+            edit->setText("");
+            edit->setPlaceholderText(obs_module_text("RizzyTos.Error.FileNotFound"));
+            return true; // missing
+        }
+        edit->setText(qpath);
+        edit->setPlaceholderText("");
+        return false;
+    };
+
+    bool any_missing = false;
+    any_missing |= apply_path(output_dir_edit_, s.output_dir);
+    any_missing |= apply_path(intro_edit_,      s.intro_path);
+    any_missing |= apply_path(outro_edit_,      s.outro_path);
+
+    if (any_missing)
+        emit settings_changed(get_settings());
 }
 
 void AutoEditDock::start_progress(const std::string &progress_file_path,
@@ -156,6 +174,14 @@ void AutoEditDock::on_poll_timer()
         std::string msg = std::string(obs_module_text("RizzyTos.Status.Error"))
                         + " " + content.substr(7);
         status_label_->setText(QString::fromStdString(msg));
+
+        // Read the worker's debug log (written next to the progress file)
+        std::ifstream dlog(progress_file_ + ".log");
+        if (dlog.is_open()) {
+            std::string line;
+            while (std::getline(dlog, line))
+                obs_log(LOG_INFO, "[rizzytos-worker] %s", line.c_str());
+        }
         return;
     }
 

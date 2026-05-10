@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 #include <plugin-support.h>
+#include <util/platform.h>
 #include <QMainWindow>
 #include <QPointer>
 #include <QPushButton>
@@ -125,11 +126,11 @@ static void obs_event_cb(enum obs_frontend_event event, void * /*private_data*/)
         // Register settings dock
         auto *dock_widget = new AutoEditDock();
         g_dock = dock_widget;
-        g_dock->set_settings(g_settings);
         QObject::connect(g_dock, &AutoEditDock::settings_changed,
                          on_dock_settings_changed);
         QObject::connect(g_dock, &AutoEditDock::record_requested,
                          on_button_clicked);
+        g_dock->set_settings(g_settings);
 
         obs_frontend_add_dock_by_id("rizzytos_auto_edit_dock",
                                     obs_module_text("RizzyTos.Dock.Title"),
@@ -157,6 +158,7 @@ bool obs_module_load(void)
 
     char *conf_dir = obs_module_get_config_path(obs_current_module(), "");
     if (conf_dir) {
+        os_mkdirs(conf_dir);
         snprintf(g_config_path, sizeof(g_config_path),
                  "%s/settings.json", conf_dir);
         bfree(conf_dir);

@@ -15,10 +15,11 @@ std::string PluginLauncher::find_worker_binary() const
 
     QDir data_dir(QString::fromUtf8(data_path));
 #ifdef _WIN32
-    return data_dir.filePath("rizzytos-worker.exe").toStdString();
+    QString path = data_dir.filePath("rizzytos-worker.exe");
 #else
-    return data_dir.filePath("rizzytos-worker").toStdString();
+    QString path = data_dir.filePath("rizzytos-worker");
 #endif
+    return QFileInfo(path).absoluteFilePath().toStdString();
 }
 
 std::string PluginLauncher::find_ffmpeg_binary() const
@@ -28,10 +29,15 @@ std::string PluginLauncher::find_ffmpeg_binary() const
 
     QDir data_dir(QString::fromUtf8(data_path));
 #ifdef _WIN32
-    return data_dir.filePath("ffmpeg.exe").toStdString();
+    QString path = data_dir.filePath("ffmpeg.exe");
 #else
-    return data_dir.filePath("ffmpeg").toStdString();
+    QString path = data_dir.filePath("ffmpeg");
 #endif
+    QString abs = QFileInfo(path).absoluteFilePath();
+    if (!QFileInfo::exists(abs))
+        obs_log(LOG_WARNING, "bundled ffmpeg not found at: %s",
+                abs.toUtf8().constData());
+    return abs.toStdString();
 }
 
 bool PluginLauncher::launch(const std::string    &input_path,
@@ -78,10 +84,19 @@ bool PluginLauncher::launch(const std::string    &input_path,
     if (!settings.outro_path.empty())
         args << "--outro" << QString::fromStdString(settings.outro_path);
 
+    obs_log(LOG_INFO, "output path: %s", output_path_.c_str());
+    obs_log(LOG_INFO, "progress file: %s", progress_path_.c_str());
+    obs_log(LOG_INFO, "worker args (%d):", args.size());
+    for (int i = 0; i < args.size(); ++i)
+        obs_log(LOG_INFO, "  [%d] %s", i, args[i].toUtf8().constData());
+
     qint64 pid = 0;
     bool ok = QProcess::startDetached(QString::fromStdString(worker), args,
                                       QString(), &pid);
-    if (!ok)
+    if (ok)
+        obs_log(LOG_INFO, "rizzytos-worker launched (pid=%lld), debug log: %s.log",
+                (long long)pid, progress_path_.c_str());
+    else
         obs_log(LOG_WARNING, "Failed to start rizzytos-worker");
 
     return ok;
