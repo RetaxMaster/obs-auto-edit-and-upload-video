@@ -10,6 +10,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QCryptographicHash>
+#include <QEventLoop>
 #include <QRandomGenerator>
 #include <keychain.h>
 
