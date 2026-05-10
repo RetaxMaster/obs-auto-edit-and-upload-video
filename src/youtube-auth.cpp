@@ -135,7 +135,7 @@ void YouTubeAuth::on_new_connection()
 
 void YouTubeAuth::exchange_code(const QString &code)
 {
-    QNetworkRequest req(QUrl(TOKEN_ENDPOINT));
+    QNetworkRequest req{QUrl(TOKEN_ENDPOINT)};
     req.setHeader(QNetworkRequest::ContentTypeHeader,
                   "application/x-www-form-urlencoded");
 
@@ -183,7 +183,7 @@ void YouTubeAuth::refresh_access_token()
         return;
     }
 
-    QNetworkRequest req(QUrl(TOKEN_ENDPOINT));
+    QNetworkRequest req{QUrl(TOKEN_ENDPOINT)};
     req.setHeader(QNetworkRequest::ContentTypeHeader,
                   "application/x-www-form-urlencoded");
 

@@ -72,7 +72,7 @@ QString YouTubeUploader::build_metadata_json() const
 
 void YouTubeUploader::initiate_session()
 {
-    QNetworkRequest req(QUrl(UPLOAD_ENDPOINT));
+    QNetworkRequest req{QUrl(UPLOAD_ENDPOINT)};
     req.setRawHeader("Authorization",
                      ("Bearer " + access_token_).toUtf8());
     req.setRawHeader("Content-Type",   "application/json; charset=UTF-8");
@@ -142,7 +142,7 @@ void YouTubeUploader::upload_next_chunk()
 
     qint64 range_end = bytes_sent_ + chunk.size() - 1;
 
-    QNetworkRequest req(QUrl(upload_url_));
+    QNetworkRequest req{QUrl(upload_url_)};
     req.setRawHeader("Authorization",
                      ("Bearer " + access_token_).toUtf8());
     req.setRawHeader("Content-Type", "video/*");
