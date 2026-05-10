@@ -37,7 +37,12 @@ jobs:
             -DRIZZYTOS_CLIENT_ID="$env:RIZZYTOS_CLIENT_ID" `
             -DRIZZYTOS_CLIENT_SECRET="$env:RIZZYTOS_CLIENT_SECRET" `
             -DBUILD_TRANSLATIONS=OFF `
-            -DBUILD_SHARED_LIBS=OFF
+            -DBUILD_TRANSLATIONS_AS_RESOURCES=OFF `
+            -DBUILD_TEST_APPLICATION=OFF `
+            -DBUILD_QTQUICK_DEMO=OFF `
+            -DBUILD_TESTING=OFF `
+            -DBUILD_SHARED_LIBS=OFF `
+            -DBUILD_WITH_QT6=ON
 
       - name: Build Release
         run: cmake --build --preset windows-x64 --config Release --parallel -- /consoleLoggerParameters:Summary /noLogo

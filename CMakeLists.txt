@@ -27,7 +27,7 @@ if(NOT WORKER_ONLY)
     target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::obs-frontend-api)
   endif()
 
-  find_package(CURL REQUIRED)
+  find_package(CURL CONFIG REQUIRED)
   target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE CURL::libcurl)
 
   if(ENABLE_QT)
@@ -48,9 +48,23 @@ if(NOT WORKER_ONLY)
       GIT_REPOSITORY https://github.com/frankosterfeld/qtkeychain.git
       GIT_TAG        0.14.3
     )
-    set(BUILD_WITH_QT6 ON CACHE BOOL "" FORCE)
-    set(QTKEYCHAIN_STATIC ON CACHE BOOL "" FORCE)
+
+    set(_rizzytos_build_testing "${BUILD_TESTING}")
+    set(BUILD_TRANSLATIONS OFF CACHE BOOL "Disable QtKeychain translations" FORCE)
+    set(BUILD_TRANSLATIONS_AS_RESOURCES OFF CACHE BOOL "Disable QtKeychain translation resources" FORCE)
+    set(BUILD_TEST_APPLICATION OFF CACHE BOOL "Disable QtKeychain test app" FORCE)
+    set(BUILD_QTQUICK_DEMO OFF CACHE BOOL "Disable QtKeychain QtQuick demo" FORCE)
+    set(BUILD_TESTING OFF CACHE BOOL "Disable QtKeychain tests" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build QtKeychain statically" FORCE)
+    set(BUILD_WITH_QT6 ON CACHE BOOL "Build QtKeychain with Qt6" FORCE)
     FetchContent_MakeAvailable(qtkeychain)
+    set(BUILD_TESTING "${_rizzytos_build_testing}" CACHE BOOL "Build unit tests for the worker" FORCE)
+    unset(_rizzytos_build_testing)
+
+    if(NOT TARGET qt6keychain)
+      message(FATAL_ERROR "QtKeychain did not create the expected qt6keychain target")
+    endif()
+
     # qtkeychain sets no BUILD_INTERFACE include dirs, so add them manually:
     # source root for keychain.h, binary dir for the generated qkeychain_export.h
     FetchContent_GetProperties(qtkeychain SOURCE_DIR _qtkc_src BINARY_DIR _qtkc_bin)

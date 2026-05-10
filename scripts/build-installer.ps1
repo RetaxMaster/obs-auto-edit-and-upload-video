@@ -22,7 +22,8 @@ $InstallerScript = Join-Path $ProjectRoot 'installer/rizzytos-auto-edit.iss'
 
 $IsccCandidates = @(
     'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
-    'C:\Program Files\Inno Setup 6\ISCC.exe'
+    'C:\Program Files\Inno Setup 6\ISCC.exe',
+    (Join-Path $env:LOCALAPPDATA 'Programs/Inno Setup 6/ISCC.exe')
 )
 
 $Iscc = $IsccCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1

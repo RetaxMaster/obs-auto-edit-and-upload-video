@@ -11,6 +11,7 @@ AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 UninstallDisplayName={#MyAppName}
 DefaultDirName={pf}\obs-studio
+DirExistsWarning=no
 DisableProgramGroupPage=yes
 OutputDir=..\dist
 OutputBaseFilename=RizzytosAutoEdit-Setup-x64
@@ -32,17 +33,17 @@ Type: filesandordirs; Name: "{app}\data\obs-plugins\rizzytos-auto-edit"
 [Code]
 function IsObsRunning(): Boolean;
 var
-  WMIService: Variant;
-  Processes: Variant;
+  ResultCode: Integer;
 begin
-  Result := False;
-  try
-    WMIService := GetObject('winmgmts:\\.\root\CIMV2');
-    Processes := WMIService.ExecQuery('SELECT ProcessId FROM Win32_Process WHERE Name = "obs64.exe"');
-    Result := Processes.Count > 0;
-  except
-    Result := False;
-  end;
+  Result :=
+    Exec(
+      ExpandConstant('{cmd}'),
+      '/C tasklist /FI "IMAGENAME eq obs64.exe" | find /I "obs64.exe" >NUL',
+      '',
+      SW_HIDE,
+      ewWaitUntilTerminated,
+      ResultCode
+    ) and (ResultCode = 0);
 end;
 
 function InitializeSetup(): Boolean;

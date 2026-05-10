@@ -176,6 +176,13 @@ function(_check_dependencies)
       set(url ${url}/${version}/${file})
     endif()
 
+    if(EXISTS "${dependencies_dir}/${file}")
+      file(SHA256 "${dependencies_dir}/${file}" _existing_hash)
+      if(NOT _existing_hash STREQUAL hash)
+        file(REMOVE "${dependencies_dir}/${file}")
+      endif()
+    endif()
+
     if(NOT EXISTS "${dependencies_dir}/${file}")
       message(STATUS "Downloading ${url}")
       file(DOWNLOAD "${url}" "${dependencies_dir}/${file}" STATUS download_status EXPECTED_HASH SHA256=${hash})
@@ -191,7 +198,7 @@ function(_check_dependencies)
       endif()
     endif()
 
-    if(NOT OBS_DEPENDENCY_${dependency}_${arch}_HASH STREQUAL ${hash})
+    if(NOT OBS_DEPENDENCY_${dependency}_${arch}_HASH STREQUAL ${hash} OR (dependency MATCHES "^(prebuilt|qt6)$" AND NOT skip))
       file(REMOVE_RECURSE "${dependencies_dir}/${destination}")
     endif()
 
