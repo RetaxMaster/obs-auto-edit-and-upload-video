@@ -15,13 +15,16 @@ WorkerArgs parse_args(int argc, char *argv[])
     };
 
     WorkerArgs args;
-    args.input    = require("--input");
-    args.output   = require("--output");
-    args.ffmpeg   = require("--ffmpeg");
-    args.vcodec   = require("--vcodec");
-    args.encoder  = require("--encoder");
-    args.bitrate  = std::stoi(require("--bitrate"));
-    args.progress = require("--progress");
+    args.input      = require("--input");
+    args.output     = require("--output");
+    args.ffmpeg     = require("--ffmpeg");
+    args.vcodec     = require("--vcodec");
+    args.encoder    = require("--encoder");
+    args.bitrate    = std::stoi(require("--bitrate"));
+    args.progress   = require("--progress");
+    args.out_width  = std::stoi(require("--width"));
+    args.out_height = std::stoi(require("--height"));
+    args.out_format = require("--format");
 
     auto it_intro = kv.find("--intro");
     if (it_intro != kv.end()) args.intro = it_intro->second;
