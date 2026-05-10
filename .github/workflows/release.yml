@@ -1,0 +1,116 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  FFMPEG_URL: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+
+jobs:
+  windows-release:
+    name: Windows x64 Release
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Configure CMake
+        env:
+          RIZZYTOS_CLIENT_ID: ${{ secrets.RIZZYTOS_CLIENT_ID }}
+          RIZZYTOS_CLIENT_SECRET: ${{ secrets.RIZZYTOS_CLIENT_SECRET }}
+        run: |
+          # These OAuth values are compiled into the binary for now.
+          # That is not ideal for public distribution; migrate to PKCE or a backend OAuth flow before external public releases.
+          cmake --preset windows-ci-x64 `
+            -DRIZZYTOS_CLIENT_ID="$env:RIZZYTOS_CLIENT_ID" `
+            -DRIZZYTOS_CLIENT_SECRET="$env:RIZZYTOS_CLIENT_SECRET" `
+            -DBUILD_TRANSLATIONS=OFF `
+            -DBUILD_SHARED_LIBS=OFF
+
+      - name: Build Release
+        run: cmake --build --preset windows-x64 --config Release --parallel -- /consoleLoggerParameters:Summary /noLogo
+
+      - name: Download FFmpeg
+        run: |
+          $DownloadDir = Join-Path $env:RUNNER_TEMP 'ffmpeg-download'
+          $ExtractDir = Join-Path $env:RUNNER_TEMP 'ffmpeg-extract'
+          New-Item -ItemType Directory -Force -Path $DownloadDir, $ExtractDir | Out-Null
+
+          $ZipPath = Join-Path $DownloadDir 'ffmpeg.zip'
+          Invoke-WebRequest -Uri $env:FFMPEG_URL -OutFile $ZipPath -UseBasicParsing
+          Expand-Archive -Path $ZipPath -DestinationPath $ExtractDir -Force
+
+          $FfmpegExe = Get-ChildItem -Path $ExtractDir -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+          $FfprobeExe = Get-ChildItem -Path $ExtractDir -Recurse -Filter ffprobe.exe | Select-Object -First 1
+          if (-not $FfmpegExe -or -not $FfprobeExe) {
+            throw 'Downloaded FFmpeg archive did not contain ffmpeg.exe and ffprobe.exe'
+          }
+
+          $StageDir = Join-Path $env:RUNNER_TEMP 'ffmpeg-stage'
+          New-Item -ItemType Directory -Force -Path $StageDir | Out-Null
+          Copy-Item $FfmpegExe.FullName (Join-Path $StageDir 'ffmpeg.exe') -Force
+          Copy-Item $FfprobeExe.FullName (Join-Path $StageDir 'ffprobe.exe') -Force
+          "FFMPEG_DIR=$StageDir" >> $env:GITHUB_ENV
+
+      - name: Create third-party notices
+        run: |
+          @'
+          Rizzytos Auto Edit bundles FFmpeg executables for video processing.
+
+          FFmpeg project: https://ffmpeg.org/
+          Windows build source: ${{ env.FFMPEG_URL }}
+
+          Review the license terms of the selected FFmpeg build before public distribution.
+          '@ | Set-Content -Path THIRD-PARTY-NOTICES.txt -Encoding UTF8
+
+          $BuiltDataDir = 'build_x64/rundir/Release/rizzytos-auto-edit'
+          New-Item -ItemType Directory -Force -Path $BuiltDataDir | Out-Null
+          Copy-Item THIRD-PARTY-NOTICES.txt (Join-Path $BuiltDataDir 'THIRD-PARTY-NOTICES.txt') -Force
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        run: |
+          $Version = "${{ github.ref_name }}".TrimStart('v')
+          scripts/build-installer.ps1 -BuildDir build_x64 -Config Release -FfmpegDir "$env:FFMPEG_DIR" -Version $Version
+
+      - name: Create portable ZIP
+        run: Compress-Archive -Path release/* -DestinationPath dist/RizzytosAutoEdit-portable-x64.zip -Force
+
+      - name: Generate checksums
+        run: |
+          Get-FileHash dist/RizzytosAutoEdit-Setup-x64.exe, dist/RizzytosAutoEdit-portable-x64.zip -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash)  $(Split-Path -Leaf $_.Path)" } |
+            Set-Content -Path dist/checksums.txt -Encoding ASCII
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rizzytos-auto-edit-windows-x64-${{ github.ref_name }}
+          path: |
+            dist/RizzytosAutoEdit-Setup-x64.exe
+            dist/RizzytosAutoEdit-portable-x64.zip
+            dist/checksums.txt
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Rizzytos Auto Edit ${{ github.ref_name }}
+          files: |
+            dist/RizzytosAutoEdit-Setup-x64.exe
+            dist/RizzytosAutoEdit-portable-x64.zip
+            dist/checksums.txt
