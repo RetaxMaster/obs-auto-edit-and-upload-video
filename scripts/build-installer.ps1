@@ -48,8 +48,7 @@ if ($IncludeSymbols) {
 
 New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
 
-$env:RIZZYTOS_VERSION = $Version
-& $Iscc $InstallerScript
+& $Iscc "/DMyAppVersion=$Version" $InstallerScript
 
 if ($LASTEXITCODE -ne 0) {
     throw "Inno Setup failed with exit code $LASTEXITCODE"

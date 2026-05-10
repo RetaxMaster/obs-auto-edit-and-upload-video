@@ -1,7 +1,6 @@
 #define MyAppName "Rizzytos Auto Edit"
 #define MyAppPublisher "RetaxMaster"
-#define MyAppVersion GetEnv("RIZZYTOS_VERSION")
-#if MyAppVersion == ""
+#ifndef MyAppVersion
 #define MyAppVersion "1.0.0"
 #endif
 
