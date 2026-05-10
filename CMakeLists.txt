@@ -46,7 +46,11 @@ if(NOT WORKER_ONLY)
     )
 
     # qtkeychain — cross-platform secure token storage
-    FetchContent_Declare(qtkeychain GIT_REPOSITORY https://github.com/frankosterfeld/qtkeychain.git GIT_TAG 0.14.3)
+    FetchContent_Declare(
+      qtkeychain
+      GIT_REPOSITORY https://github.com/frankosterfeld/qtkeychain.git
+      GIT_TAG 0.14.3
+    )
 
     set(_rizzytos_build_testing "${BUILD_TESTING}")
     set(BUILD_TRANSLATIONS OFF CACHE BOOL "Disable QtKeychain translations" FORCE)
@@ -62,6 +66,10 @@ if(NOT WORKER_ONLY)
 
     if(NOT TARGET qt6keychain)
       message(FATAL_ERROR "QtKeychain did not create the expected qt6keychain target")
+    endif()
+
+    if(APPLE)
+      set_target_properties(qt6keychain PROPERTIES XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC NO)
     endif()
 
     # qtkeychain sets no BUILD_INTERFACE include dirs, so add them manually:
