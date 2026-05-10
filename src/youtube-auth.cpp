@@ -11,7 +11,11 @@
 #include <QJsonObject>
 #include <QCryptographicHash>
 #include <QRandomGenerator>
-#include <qt6keychain/keychain.h>
+#if __has_include(<qt6keychain/keychain.h>)
+#  include <qt6keychain/keychain.h>
+#else
+#  include <keychain.h>
+#endif
 
 static constexpr const char *KEYCHAIN_SERVICE = "rizzytos-auto-edit";
 static constexpr const char *KEYCHAIN_KEY     = "youtube_refresh_token";
