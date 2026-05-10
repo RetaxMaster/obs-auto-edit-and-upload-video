@@ -7,6 +7,8 @@
 !/cmake
 !/data
 !/docs
+!/installer
+!/scripts
 !/src
 !/tests
 !/worker
@@ -27,3 +29,18 @@
 
 # Exclude CMake build number cache
 /cmake/.CMakeBuildNumber
+
+# Generated build and release outputs
+/build/
+/build_*/
+/release/
+/dist/
+/installer/output/
+/installer/*.tmp
+/installer/*.log
+
+# Downloaded third-party binaries and archives
+/ffmpeg/
+/ffmpeg-*/
+/ffmpeg*.zip
+/ffmpeg*.7z
