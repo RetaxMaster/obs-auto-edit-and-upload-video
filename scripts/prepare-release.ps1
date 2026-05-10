@@ -103,7 +103,6 @@ $WorkerExe = Join-Path $ResolvedBuildDir "$Config/rizzytos-worker.exe"
 $BuiltDataDir = Join-Path $ResolvedBuildDir "rundir/$Config/rizzytos-auto-edit"
 
 Copy-RequiredFile -Source $PluginDll -Destination (Join-Path $PluginBinDir 'rizzytos-auto-edit.dll') -Description 'plugin DLL'
-Copy-RequiredFile -Source $WorkerExe -Destination (Join-Path $PluginDataDir 'rizzytos-worker.exe') -Description 'worker executable'
 
 if (Test-Path -LiteralPath $BuiltDataDir) {
     Get-ChildItem -LiteralPath $BuiltDataDir -Force | ForEach-Object {
@@ -113,6 +112,8 @@ if (Test-Path -LiteralPath $BuiltDataDir) {
 } else {
     Write-Warning "Plugin data directory not found, continuing without data: $BuiltDataDir"
 }
+
+Copy-RequiredFile -Source $WorkerExe -Destination (Join-Path $PluginDataDir 'rizzytos-worker.exe') -Description 'worker executable'
 
 if ($FfmpegDir) {
     $ResolvedFfmpegDir = Resolve-RequiredPath -Path (Resolve-RepoPath -Path $FfmpegDir -ProjectRoot $ProjectRoot) -Description 'FFmpeg directory'
