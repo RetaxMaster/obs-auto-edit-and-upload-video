@@ -43,14 +43,17 @@ int main(int argc, char *argv[])
     }
 
     FfmpegSpec spec;
-    spec.ffmpeg  = args.ffmpeg;
-    spec.intro   = args.intro;
-    spec.input   = args.input;
-    spec.outro   = args.outro;
-    spec.output  = args.output;
-    spec.vcodec  = args.vcodec;
-    spec.encoder = args.encoder;
-    spec.bitrate = args.bitrate;
+    spec.ffmpeg      = args.ffmpeg;
+    spec.intro       = args.intro;
+    spec.input       = args.input;
+    spec.outro       = args.outro;
+    spec.output      = args.output;
+    spec.vcodec      = args.vcodec;
+    spec.encoder     = args.encoder;
+    spec.bitrate     = args.bitrate;
+    spec.out_width   = args.out_width;
+    spec.out_height  = args.out_height;
+    spec.out_format  = args.out_format;
 
     return run_ffmpeg(spec, args.progress);
 }

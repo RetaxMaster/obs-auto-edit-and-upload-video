@@ -3,14 +3,17 @@
 #include <vector>
 
 struct FfmpegSpec {
-    std::string ffmpeg;   // path to ffmpeg binary
-    std::string intro;    // optional; empty = skip
-    std::string input;    // required; main recording
-    std::string outro;    // optional; empty = skip
-    std::string output;   // required; output file path
-    std::string vcodec;   // "h264" | "hevc" | "av1"
-    std::string encoder;  // "nvenc" | "qsv" | "amf" | "videotoolbox" | "software"
-    int         bitrate;  // kbps
+    std::string ffmpeg;
+    std::string intro;
+    std::string input;
+    std::string outro;
+    std::string output;
+    std::string vcodec;
+    std::string encoder;
+    int         bitrate;
+    int         out_width  = 0;  // 0 = do not force scale
+    int         out_height = 0;
+    std::string out_format;      // "mkv" | "mp4" | "" = infer from extension
 };
 
 // Returns the full FFmpeg argument list (first element is the ffmpeg binary path).
