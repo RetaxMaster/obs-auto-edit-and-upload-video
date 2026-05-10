@@ -272,8 +272,7 @@ void YouTubeUploader::start_upload_thread()
                 QMetaObject::invokeMethod(self.data(), [self, url]() {
                     if (!self) return;
                     emit self->progress(100);
-                    emit self->status_changed(
-                        QString(obs_module_text("RizzyTos.YouTube.StatusDone")) + " " + url);
+                    emit self->status_changed(obs_module_text("RizzyTos.YouTube.StatusDone"));
                     emit self->completed(url);
                 }, Qt::QueuedConnection);
                 return;

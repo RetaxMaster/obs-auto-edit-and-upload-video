@@ -33,9 +33,10 @@ public:
     // Called by plugin-main when auth state changes
     void set_youtube_authenticated(bool authenticated);
 
-    // Called by plugin-main to drive upload progress/status
+    // Called by plugin-main to drive upload progress/status/result
     void set_youtube_upload_progress(int percent);
     void set_youtube_upload_status(const QString &text);
+    void set_youtube_url(const QString &url);
 
 signals:
     void settings_changed(const PluginSettings &s);
@@ -69,6 +70,9 @@ private:
     QDateTime    last_progress_change_;
     int          last_progress_value_ = -1;
 
+    // ── Recording extra widgets ──────────────────────────────────────────────
+    QCheckBox    *delete_recording_check_ = nullptr;
+
     // ── YouTube widgets ──────────────────────────────────────────────────────
     QPushButton  *yt_connect_btn_    = nullptr; // shown when not authenticated
     QWidget      *yt_controls_       = nullptr; // shown when authenticated
@@ -79,6 +83,8 @@ private:
     QTextEdit    *yt_desc_edit_      = nullptr;
     QProgressBar *yt_progress_bar_   = nullptr;
     QLabel       *yt_status_label_   = nullptr;
+    QLineEdit    *yt_url_edit_       = nullptr; // readonly URL after upload
+    QPushButton  *yt_copy_btn_       = nullptr; // copy URL to clipboard
 };
 
 QPushButton *inject_record_button(QWidget *main_window);

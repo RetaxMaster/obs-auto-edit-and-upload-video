@@ -6,8 +6,9 @@ struct PluginSettings {
     std::string output_name_template = "rizzytos_%Y-%m-%d_%H-%M-%S";
     std::string intro_path;
     std::string outro_path;
-    std::string output_resolution = "1080p"; // "720p" | "1080p" | "2k" | "4k"
-    std::string output_format     = "mkv";   // "mkv" | "mp4"
+    std::string output_resolution  = "1080p"; // "720p" | "1080p" | "2k" | "4k"
+    std::string output_format      = "mkv";   // "mkv" | "mp4"
+    bool        delete_recording   = false;   // delete raw OBS recording after editing
 };
 
 struct YouTubeSettings {

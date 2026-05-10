@@ -20,6 +20,7 @@ PluginSettings settings_load(const char *config_path)
     if (outro    && *outro)    s.outro_path           = outro;
     if (res      && *res)      s.output_resolution    = res;
     if (fmt      && *fmt)      s.output_format        = fmt;
+    s.delete_recording = obs_data_get_bool(data, "delete_recording");
 
     obs_data_release(data);
     return s;
@@ -37,6 +38,7 @@ void settings_save(const PluginSettings &s, const char *config_path)
     obs_data_set_string(data, "outro_path",           s.outro_path.c_str());
     obs_data_set_string(data, "output_resolution",    s.output_resolution.c_str());
     obs_data_set_string(data, "output_format",        s.output_format.c_str());
+    obs_data_set_bool(data,   "delete_recording",     s.delete_recording);
 
     obs_data_save_json(data, config_path);
     obs_data_release(data);

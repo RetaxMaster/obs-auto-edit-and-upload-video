@@ -1,14 +1,16 @@
 #include "plugin-ui.h"
 #include <obs-module.h>
 #include <plugin-support.h>
-#include <QVBoxLayout>
-#include <QHBoxLayout>
+#include <QApplication>
+#include <QButtonGroup>
+#include <QClipboard>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QGroupBox>
+#include <QHBoxLayout>
 #include <QMainWindow>
 #include <QSizePolicy>
-#include <QGroupBox>
-#include <QButtonGroup>
+#include <QVBoxLayout>
 #include <fstream>
 #include <string>
 
@@ -105,6 +107,13 @@ AutoEditDock::AutoEditDock(QWidget *parent) : QWidget(parent)
         connect(format_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
                 this, [this](int) { emit settings_changed(get_settings()); });
     }
+
+    // Delete recording checkbox
+    delete_recording_check_ = new QCheckBox(
+        obs_module_text("RizzyTos.Settings.DeleteRecording"), this);
+    layout->addWidget(delete_recording_check_);
+    connect(delete_recording_check_, &QCheckBox::toggled,
+            this, [this](bool) { emit settings_changed(get_settings()); });
 
     // Separator
     auto *sep = new QFrame(this);
@@ -211,8 +220,24 @@ AutoEditDock::AutoEditDock(QWidget *parent) : QWidget(parent)
     // Upload status label
     yt_status_label_ = new QLabel(yt_controls_);
     yt_status_label_->setWordWrap(true);
-    yt_status_label_->setOpenExternalLinks(true);
     yt_vbox->addWidget(yt_status_label_);
+
+    // URL row — shown only after a successful upload
+    {
+        auto *row = new QHBoxLayout;
+        yt_url_edit_ = new QLineEdit(yt_controls_);
+        yt_url_edit_->setReadOnly(true);
+        yt_url_edit_->hide();
+        yt_copy_btn_ = new QPushButton(
+            obs_module_text("RizzyTos.YouTube.CopyButton"), yt_controls_);
+        yt_copy_btn_->hide();
+        row->addWidget(yt_url_edit_);
+        row->addWidget(yt_copy_btn_);
+        yt_vbox->addLayout(row);
+        connect(yt_copy_btn_, &QPushButton::clicked, this, [this]() {
+            QApplication::clipboard()->setText(yt_url_edit_->text());
+        });
+    }
 
     layout->addWidget(yt_controls_);
 
@@ -237,6 +262,7 @@ PluginSettings AutoEditDock::get_settings() const
     s.outro_path           = outro_edit_->text().toStdString();
     s.output_resolution    = resolution_combo_->currentData().toString().toStdString();
     s.output_format        = format_combo_->currentData().toString().toStdString();
+    s.delete_recording     = delete_recording_check_->isChecked();
     return s;
 }
 
@@ -273,6 +299,8 @@ void AutoEditDock::set_settings(const PluginSettings &s)
             break;
         }
     }
+
+    delete_recording_check_->setChecked(s.delete_recording);
 
     if (any_missing)
         emit settings_changed(get_settings());
@@ -438,6 +466,11 @@ void AutoEditDock::set_youtube_authenticated(bool authenticated)
 void AutoEditDock::set_youtube_upload_progress(int percent)
 {
     if (!yt_progress_bar_) return;
+    // Hide previous URL result when a new upload begins
+    if (percent == 0) {
+        if (yt_url_edit_)  yt_url_edit_->hide();
+        if (yt_copy_btn_)  yt_copy_btn_->hide();
+    }
     yt_progress_bar_->setValue(percent);
     yt_progress_bar_->show();
 }
@@ -445,6 +478,15 @@ void AutoEditDock::set_youtube_upload_progress(int percent)
 void AutoEditDock::set_youtube_upload_status(const QString &text)
 {
     if (yt_status_label_) yt_status_label_->setText(text);
+}
+
+void AutoEditDock::set_youtube_url(const QString &url)
+{
+    if (yt_url_edit_) {
+        yt_url_edit_->setText(url);
+        yt_url_edit_->show();
+    }
+    if (yt_copy_btn_) yt_copy_btn_->show();
 }
 
 void AutoEditDock::on_youtube_upload_toggled(bool /*checked*/)

@@ -45,6 +45,7 @@ static QPointer<AutoEditDock>    g_dock;
 static QPointer<QPushButton>     g_button;
 static QPointer<YouTubeAuth>     g_yt_auth;
 static std::string               g_pending_upload_path;
+static std::string               g_pending_delete_path; // raw recording, deleted if enabled
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -87,6 +88,7 @@ static void start_youtube_upload(const std::string &video_path)
                      [](const QString &url) {
                          obs_log(LOG_INFO, "YouTube upload completed: %s",
                                  url.toUtf8().constData());
+                         if (g_dock) g_dock->set_youtube_url(url);
                      });
     QObject::connect(uploader, &YouTubeUploader::completed,
                      uploader, &QObject::deleteLater);
@@ -117,6 +119,13 @@ static void start_youtube_upload(const std::string &video_path)
 static void on_processing_finished()
 {
     set_button_idle();
+
+    // Delete the raw OBS recording if the user enabled that option
+    if (g_settings.delete_recording && !g_pending_delete_path.empty()) {
+        os_unlink(g_pending_delete_path.c_str());
+        g_pending_delete_path.clear();
+    }
+
     if (g_yt_settings.upload_enabled && !g_pending_upload_path.empty()) {
         if (!g_yt_auth || !g_yt_auth->is_authenticated()) {
             obs_log(LOG_WARNING,
@@ -160,6 +169,7 @@ static void trigger_auto_edit()
         return;
     }
 
+    g_pending_delete_path = rec_path;
     g_pending_upload_path = g_launcher.output_path();
     set_button_processing();
 
