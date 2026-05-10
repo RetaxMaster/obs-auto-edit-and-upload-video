@@ -1,24 +1,31 @@
 #include "youtube-auth.h"
 #include <obs-module.h>
 #include <plugin-support.h>
+#include <QCryptographicHash>
 #include <QDesktopServices>
-#include <QUrl>
-#include <QUrlQuery>
-#include <QTcpSocket>
-#include <QNetworkRequest>
-#include <QNetworkReply>
+#include <QEventLoop>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QCryptographicHash>
-#include <QEventLoop>
+#include <QPointer>
 #include <QRandomGenerator>
+#include <QThread>
+#include <QTcpSocket>
+#include <QUrl>
+#include <QUrlQuery>
 #include <keychain.h>
+#include <curl/curl.h>
 
 static constexpr const char *KEYCHAIN_SERVICE = "rizzytos-auto-edit";
 static constexpr const char *KEYCHAIN_KEY     = "youtube_refresh_token";
 static constexpr const char *TOKEN_ENDPOINT   = "https://oauth2.googleapis.com/token";
 static constexpr const char *AUTH_ENDPOINT    = "https://accounts.google.com/o/oauth2/v2/auth";
 static constexpr const char *SCOPE            = "https://www.googleapis.com/auth/youtube.upload";
+
+static size_t curl_write_cb(char *ptr, size_t sz, size_t n, void *ud)
+{
+    static_cast<QByteArray *>(ud)->append(ptr, (qsizetype)(sz * n));
+    return sz * n;
+}
 
 static QString random_base64url(int bytes)
 {
@@ -37,7 +44,6 @@ static QString sha256_base64url(const QByteArray &data)
 
 YouTubeAuth::YouTubeAuth(QObject *parent)
     : QObject(parent)
-    , nam_(new QNetworkAccessManager(this))
 {
     refresh_token_ = load_refresh_token();
 }
@@ -49,7 +55,6 @@ bool YouTubeAuth::is_authenticated() const
 
 void YouTubeAuth::start_auth_flow()
 {
-    // Spin up loopback server on an OS-assigned port
     if (!tcp_server_) {
         tcp_server_ = new QTcpServer(this);
         connect(tcp_server_, &QTcpServer::newConnection,
@@ -63,10 +68,9 @@ void YouTubeAuth::start_auth_flow()
     }
     redirect_port_ = tcp_server_->serverPort();
 
-    // PKCE
     code_verifier_ = random_base64url(32);
     QString code_challenge = sha256_base64url(code_verifier_.toUtf8());
-    state_         = random_base64url(16);
+    state_ = random_base64url(16);
 
     QUrl url(AUTH_ENDPOINT);
     QUrlQuery q;
@@ -89,11 +93,9 @@ void YouTubeAuth::on_new_connection()
     QTcpSocket *socket = tcp_server_->nextPendingConnection();
     if (!socket) return;
 
-    // Read the HTTP request line (blocking with short timeout is fine here)
     socket->waitForReadyRead(3000);
     QByteArray request = socket->readAll();
 
-    // Parse GET /?code=...&state=... HTTP/1.1
     QString first_line = QString::fromUtf8(request).split('\n').first();
     QUrl req_url("http://localhost" + first_line.split(' ').value(1));
     QUrlQuery params(req_url);
@@ -136,45 +138,73 @@ void YouTubeAuth::on_new_connection()
 
 void YouTubeAuth::exchange_code(const QString &code)
 {
-    QNetworkRequest req{QUrl(TOKEN_ENDPOINT)};
-    req.setHeader(QNetworkRequest::ContentTypeHeader,
-                  "application/x-www-form-urlencoded");
+    // Capture all needed values by value — the thread must not access members directly.
+    QString c_id       = QString(RIZZYTOS_CLIENT_ID);
+    QString c_secret   = QString(RIZZYTOS_CLIENT_SECRET);
+    QString c_verifier = code_verifier_;
+    QString c_redirect = QString("http://127.0.0.1:%1").arg(redirect_port_);
 
-    QUrlQuery body;
-    body.addQueryItem("client_id",     RIZZYTOS_CLIENT_ID);
-    body.addQueryItem("client_secret", RIZZYTOS_CLIENT_SECRET);
-    body.addQueryItem("code",          code);
-    body.addQueryItem("code_verifier", code_verifier_);
-    body.addQueryItem("redirect_uri",  QString("http://127.0.0.1:%1").arg(redirect_port_));
-    body.addQueryItem("grant_type",    "authorization_code");
+    QPointer<YouTubeAuth> self(this);
+    QThread *t = QThread::create([self, code, c_id, c_secret, c_verifier, c_redirect]() {
+        QUrlQuery body;
+        body.addQueryItem("client_id",     c_id);
+        body.addQueryItem("client_secret", c_secret);
+        body.addQueryItem("code",          code);
+        body.addQueryItem("code_verifier", c_verifier);
+        body.addQueryItem("redirect_uri",  c_redirect);
+        body.addQueryItem("grant_type",    "authorization_code");
+        QByteArray post_data = body.query(QUrl::FullyEncoded).toUtf8();
 
-    QNetworkReply *reply = nam_->post(req, body.query(QUrl::FullyEncoded).toUtf8());
-    connect(reply, &QNetworkReply::finished, this, &YouTubeAuth::on_token_reply_finished);
-}
+        QByteArray response;
+        CURL *curl = curl_easy_init();
+        if (!curl) {
+            QMetaObject::invokeMethod(self.data(), [self]() {
+                if (self) emit self->auth_failed("No se pudo inicializar cURL.");
+            }, Qt::QueuedConnection);
+            return;
+        }
 
-void YouTubeAuth::on_token_reply_finished()
-{
-    auto *reply = qobject_cast<QNetworkReply *>(sender());
-    reply->deleteLater();
+        struct curl_slist *hdrs = nullptr;
+        hdrs = curl_slist_append(hdrs, "Content-Type: application/x-www-form-urlencoded");
+        curl_easy_setopt(curl, CURLOPT_URL,           TOKEN_ENDPOINT);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS,    post_data.constData());
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)post_data.size());
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER,    hdrs);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_cb);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA,     &response);
+        CURLcode res = curl_easy_perform(curl);
+        curl_slist_free_all(hdrs);
+        curl_easy_cleanup(curl);
 
-    if (reply->error() != QNetworkReply::NoError) {
-        emit auth_failed("Error de red al intercambiar código: " + reply->errorString());
-        return;
-    }
+        if (res != CURLE_OK) {
+            QString err = QString("Error de red: ") + curl_easy_strerror(res);
+            QMetaObject::invokeMethod(self.data(), [self, err]() {
+                if (self) emit self->auth_failed(err);
+            }, Qt::QueuedConnection);
+            return;
+        }
 
-    QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
-    QJsonObject   obj = doc.object();
+        QJsonObject obj = QJsonDocument::fromJson(response).object();
+        if (obj.contains("error")) {
+            QString err = "Error OAuth: " + obj["error_description"].toString();
+            QMetaObject::invokeMethod(self.data(), [self, err]() {
+                if (self) emit self->auth_failed(err);
+            }, Qt::QueuedConnection);
+            return;
+        }
 
-    if (obj.contains("error")) {
-        emit auth_failed("Error OAuth: " + obj["error_description"].toString());
-        return;
-    }
-
-    access_token_  = obj["access_token"].toString();
-    refresh_token_ = obj["refresh_token"].toString();
-    store_refresh_token(refresh_token_);
-
-    emit authenticated(access_token_);
+        QString access_tok  = obj["access_token"].toString();
+        QString refresh_tok = obj["refresh_token"].toString();
+        QMetaObject::invokeMethod(self.data(), [self, access_tok, refresh_tok]() {
+            if (!self) return;
+            self->access_token_  = access_tok;
+            self->refresh_token_ = refresh_tok;
+            self->store_refresh_token(refresh_tok);
+            emit self->authenticated(access_tok);
+        }, Qt::QueuedConnection);
+    });
+    connect(t, &QThread::finished, t, &QObject::deleteLater);
+    t->start();
 }
 
 void YouTubeAuth::refresh_access_token()
@@ -184,43 +214,68 @@ void YouTubeAuth::refresh_access_token()
         return;
     }
 
-    QNetworkRequest req{QUrl(TOKEN_ENDPOINT)};
-    req.setHeader(QNetworkRequest::ContentTypeHeader,
-                  "application/x-www-form-urlencoded");
+    QString c_id      = QString(RIZZYTOS_CLIENT_ID);
+    QString c_secret  = QString(RIZZYTOS_CLIENT_SECRET);
+    QString c_refresh = refresh_token_;
 
-    QUrlQuery body;
-    body.addQueryItem("client_id",     RIZZYTOS_CLIENT_ID);
-    body.addQueryItem("client_secret", RIZZYTOS_CLIENT_SECRET);
-    body.addQueryItem("refresh_token", refresh_token_);
-    body.addQueryItem("grant_type",    "refresh_token");
+    QPointer<YouTubeAuth> self(this);
+    QThread *t = QThread::create([self, c_id, c_secret, c_refresh]() {
+        QUrlQuery body;
+        body.addQueryItem("client_id",     c_id);
+        body.addQueryItem("client_secret", c_secret);
+        body.addQueryItem("refresh_token", c_refresh);
+        body.addQueryItem("grant_type",    "refresh_token");
+        QByteArray post_data = body.query(QUrl::FullyEncoded).toUtf8();
 
-    QNetworkReply *reply = nam_->post(req, body.query(QUrl::FullyEncoded).toUtf8());
-    connect(reply, &QNetworkReply::finished, this, &YouTubeAuth::on_refresh_reply_finished);
-}
+        QByteArray response;
+        CURL *curl = curl_easy_init();
+        if (!curl) {
+            QMetaObject::invokeMethod(self.data(), [self]() {
+                if (self) emit self->auth_failed("No se pudo inicializar cURL.");
+            }, Qt::QueuedConnection);
+            return;
+        }
 
-void YouTubeAuth::on_refresh_reply_finished()
-{
-    auto *reply = qobject_cast<QNetworkReply *>(sender());
-    reply->deleteLater();
+        struct curl_slist *hdrs = nullptr;
+        hdrs = curl_slist_append(hdrs, "Content-Type: application/x-www-form-urlencoded");
+        curl_easy_setopt(curl, CURLOPT_URL,           TOKEN_ENDPOINT);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS,    post_data.constData());
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)post_data.size());
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER,    hdrs);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_cb);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA,     &response);
+        CURLcode res = curl_easy_perform(curl);
+        curl_slist_free_all(hdrs);
+        curl_easy_cleanup(curl);
 
-    if (reply->error() != QNetworkReply::NoError) {
-        emit auth_failed("Error de red al refrescar token: " + reply->errorString());
-        return;
-    }
+        if (res != CURLE_OK) {
+            QString err = QString("Error de red: ") + curl_easy_strerror(res);
+            QMetaObject::invokeMethod(self.data(), [self, err]() {
+                if (self) emit self->auth_failed(err);
+            }, Qt::QueuedConnection);
+            return;
+        }
 
-    QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
-    QJsonObject   obj = doc.object();
+        QJsonObject obj = QJsonDocument::fromJson(response).object();
+        if (obj.contains("error")) {
+            QMetaObject::invokeMethod(self.data(), [self]() {
+                if (!self) return;
+                self->delete_refresh_token();
+                self->refresh_token_.clear();
+                emit self->auth_failed("Refresh token inválido.");
+            }, Qt::QueuedConnection);
+            return;
+        }
 
-    if (obj.contains("error")) {
-        // Refresh token revoked — clear stored token so UI shows Connect button
-        delete_refresh_token();
-        refresh_token_.clear();
-        emit auth_failed("Refresh token inválido: " + obj["error_description"].toString());
-        return;
-    }
-
-    access_token_ = obj["access_token"].toString();
-    emit token_refreshed(access_token_);
+        QString tok = obj["access_token"].toString();
+        QMetaObject::invokeMethod(self.data(), [self, tok]() {
+            if (!self) return;
+            self->access_token_ = tok;
+            emit self->token_refreshed(tok);
+        }, Qt::QueuedConnection);
+    });
+    connect(t, &QThread::finished, t, &QObject::deleteLater);
+    t->start();
 }
 
 void YouTubeAuth::disconnect_account()

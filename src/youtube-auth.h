@@ -2,7 +2,6 @@
 #include <QObject>
 #include <QString>
 #include <QTcpServer>
-#include <QNetworkAccessManager>
 
 // Handles OAuth 2.0 PKCE flow for YouTube and secure token persistence.
 // Emits authenticated() when a valid access token is available,
@@ -34,8 +33,6 @@ signals:
 
 private slots:
     void on_new_connection();
-    void on_token_reply_finished();
-    void on_refresh_reply_finished();
 
 private:
     void exchange_code(const QString &code);
@@ -43,11 +40,10 @@ private:
     QString load_refresh_token() const;
     void delete_refresh_token();
 
-    QTcpServer            *tcp_server_      = nullptr;
-    QNetworkAccessManager *nam_             = nullptr;
-    QString                code_verifier_;
-    QString                state_;
-    QString                access_token_;
-    QString                refresh_token_;
-    int                    redirect_port_   = 0;
+    QTcpServer *tcp_server_    = nullptr;
+    QString     code_verifier_;
+    QString     state_;
+    QString     access_token_;
+    QString     refresh_token_;
+    int         redirect_port_ = 0;
 };

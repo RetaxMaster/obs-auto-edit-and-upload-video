@@ -27,6 +27,9 @@ if(NOT WORKER_ONLY)
     target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::obs-frontend-api)
   endif()
 
+  find_package(CURL REQUIRED)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE CURL::libcurl)
+
   if(ENABLE_QT)
     find_package(Qt6 COMPONENTS Widgets Core Network REQUIRED)
     target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets Qt6::Network)
