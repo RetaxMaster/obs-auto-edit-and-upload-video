@@ -148,8 +148,7 @@ function(_check_dependencies)
 
     if(EXISTS "${dependencies_dir}/.dependency_${dependency}_${arch}.sha256")
       file(
-        READ
-        "${dependencies_dir}/.dependency_${dependency}_${arch}.sha256"
+        READ "${dependencies_dir}/.dependency_${dependency}_${arch}.sha256"
         OBS_DEPENDENCY_${dependency}_${arch}_HASH
       )
     endif()
@@ -198,7 +197,10 @@ function(_check_dependencies)
       endif()
     endif()
 
-    if(NOT OBS_DEPENDENCY_${dependency}_${arch}_HASH STREQUAL ${hash} OR (dependency MATCHES "^(prebuilt|qt6)$" AND NOT skip))
+    if(
+      NOT OBS_DEPENDENCY_${dependency}_${arch}_HASH STREQUAL ${hash}
+      OR (dependency MATCHES "^(prebuilt|qt6)$" AND NOT skip)
+    )
       file(REMOVE_RECURSE "${dependencies_dir}/${destination}")
     endif()
 
