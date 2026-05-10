@@ -7,8 +7,13 @@
 #include <QFileInfo>
 #include <QMainWindow>
 #include <QSizePolicy>
+#include <QGroupBox>
+#include <QButtonGroup>
 #include <fstream>
 #include <string>
+
+// UTF-8 encoded × (U+00D7) for combo item labels
+static constexpr const char *TIMES_SIGN = "\xC3\x97";
 
 // ── AutoEditDock ─────────────────────────────────────────────────────────────
 
@@ -63,6 +68,44 @@ AutoEditDock::AutoEditDock(QWidget *parent) : QWidget(parent)
         layout->addLayout(row);
     }
 
+    // Resolution selector
+    {
+        auto *row = new QHBoxLayout;
+        auto *lbl = new QLabel(obs_module_text("RizzyTos.Settings.OutputResolution"), this);
+        lbl->setFixedWidth(100);
+        resolution_combo_ = new QComboBox(this);
+        resolution_combo_->addItem(
+            QString("720p (1280%1720)").arg(TIMES_SIGN),  QString("720p"));
+        resolution_combo_->addItem(
+            QString("1080p (1920%11080)").arg(TIMES_SIGN), QString("1080p"));
+        resolution_combo_->addItem(
+            QString("2K (2560%11440)").arg(TIMES_SIGN),   QString("2k"));
+        resolution_combo_->addItem(
+            QString("4K (3840%12160)").arg(TIMES_SIGN),   QString("4k"));
+        resolution_combo_->setCurrentIndex(1); // default 1080p
+        row->addWidget(lbl);
+        row->addWidget(resolution_combo_);
+        layout->addLayout(row);
+        connect(resolution_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, [this](int) { emit settings_changed(get_settings()); });
+    }
+
+    // Format selector
+    {
+        auto *row = new QHBoxLayout;
+        auto *lbl = new QLabel(obs_module_text("RizzyTos.Settings.OutputFormat"), this);
+        lbl->setFixedWidth(100);
+        format_combo_ = new QComboBox(this);
+        format_combo_->addItem("MKV (.mkv)", QString("mkv"));
+        format_combo_->addItem("MP4 (.mp4)", QString("mp4"));
+        format_combo_->setCurrentIndex(0); // default MKV
+        row->addWidget(lbl);
+        row->addWidget(format_combo_);
+        layout->addLayout(row);
+        connect(format_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, [this](int) { emit settings_changed(get_settings()); });
+    }
+
     // Separator
     auto *sep = new QFrame(this);
     sep->setFrameShape(QFrame::HLine);
@@ -79,8 +122,6 @@ AutoEditDock::AutoEditDock(QWidget *parent) : QWidget(parent)
     progress_bar_->hide();
     layout->addWidget(progress_bar_);
 
-    layout->addStretch();
-
     // Emit settings_changed when any field loses focus
     auto emit_changed = [this]() { emit settings_changed(get_settings()); };
     connect(output_dir_edit_,  &QLineEdit::editingFinished, this, emit_changed);
@@ -92,6 +133,99 @@ AutoEditDock::AutoEditDock(QWidget *parent) : QWidget(parent)
     poll_timer_ = new QTimer(this);
     poll_timer_->setInterval(500);
     connect(poll_timer_, &QTimer::timeout, this, &AutoEditDock::on_poll_timer);
+
+    // ── YouTube section ────────────────────────────────────────────────────
+
+    // Separator
+    auto *yt_sep = new QFrame(this);
+    yt_sep->setFrameShape(QFrame::HLine);
+    yt_sep->setFrameShadow(QFrame::Sunken);
+    layout->addWidget(yt_sep);
+
+    // Connect button (shown when NOT authenticated)
+    yt_connect_btn_ = new QPushButton(
+        obs_module_text("RizzyTos.YouTube.ConnectButton"), this);
+    layout->addWidget(yt_connect_btn_);
+    connect(yt_connect_btn_, &QPushButton::clicked,
+            this, &AutoEditDock::youtube_connect_requested);
+
+    // Controls widget (shown when authenticated)
+    yt_controls_ = new QWidget(this);
+    yt_controls_->hide();
+    auto *yt_vbox = new QVBoxLayout(yt_controls_);
+    yt_vbox->setContentsMargins(0, 0, 0, 0);
+    yt_vbox->setSpacing(4);
+
+    yt_upload_check_ = new QCheckBox(
+        obs_module_text("RizzyTos.YouTube.UploadCheckbox"), yt_controls_);
+    yt_vbox->addWidget(yt_upload_check_);
+
+    // Privacy radio buttons
+    {
+        auto *row = new QHBoxLayout;
+        yt_private_radio_ = new QRadioButton(
+            obs_module_text("RizzyTos.YouTube.PrivacyPrivate"), yt_controls_);
+        yt_public_radio_  = new QRadioButton(
+            obs_module_text("RizzyTos.YouTube.PrivacyPublic"),  yt_controls_);
+        yt_private_radio_->setChecked(true);
+        row->addWidget(yt_private_radio_);
+        row->addWidget(yt_public_radio_);
+        row->addStretch();
+        yt_vbox->addLayout(row);
+    }
+
+    // Title
+    {
+        auto *row = new QHBoxLayout;
+        auto *lbl = new QLabel(
+            obs_module_text("RizzyTos.YouTube.TitleLabel"), yt_controls_);
+        lbl->setFixedWidth(100);
+        yt_title_edit_ = new QLineEdit(yt_controls_);
+        row->addWidget(lbl);
+        row->addWidget(yt_title_edit_);
+        yt_vbox->addLayout(row);
+    }
+
+    // Description
+    {
+        auto *row = new QHBoxLayout;
+        auto *lbl = new QLabel(
+            obs_module_text("RizzyTos.YouTube.DescLabel"), yt_controls_);
+        lbl->setFixedWidth(100);
+        lbl->setAlignment(Qt::AlignTop);
+        yt_desc_edit_ = new QTextEdit(yt_controls_);
+        yt_desc_edit_->setFixedHeight(60);
+        yt_desc_edit_->setPlainText(
+            QString::fromUtf8("Mira mis streams en https://www.twitch.tv/nansulli \xF0\x9F\x92\x96"));
+        row->addWidget(lbl);
+        row->addWidget(yt_desc_edit_);
+        yt_vbox->addLayout(row);
+    }
+
+    // Upload progress bar (hidden until upload is running)
+    yt_progress_bar_ = new QProgressBar(yt_controls_);
+    yt_progress_bar_->setRange(0, 100);
+    yt_progress_bar_->hide();
+    yt_vbox->addWidget(yt_progress_bar_);
+
+    // Upload status label
+    yt_status_label_ = new QLabel(yt_controls_);
+    yt_status_label_->setWordWrap(true);
+    yt_status_label_->setOpenExternalLinks(true);
+    yt_vbox->addWidget(yt_status_label_);
+
+    layout->addWidget(yt_controls_);
+
+    // Emit youtube_settings_changed when any YT field changes
+    auto emit_yt = [this]() { emit youtube_settings_changed(get_youtube_settings()); };
+    connect(yt_upload_check_,  &QCheckBox::toggled,
+            this, &AutoEditDock::on_youtube_upload_toggled);
+    connect(yt_private_radio_, &QRadioButton::toggled, this, emit_yt);
+    connect(yt_public_radio_,  &QRadioButton::toggled, this, emit_yt);
+    connect(yt_title_edit_,    &QLineEdit::editingFinished, this, emit_yt);
+    connect(yt_desc_edit_,     &QTextEdit::textChanged, this, emit_yt);
+
+    layout->addStretch();
 }
 
 PluginSettings AutoEditDock::get_settings() const
@@ -101,6 +235,8 @@ PluginSettings AutoEditDock::get_settings() const
     s.output_name_template = output_name_edit_->text().toStdString();
     s.intro_path           = intro_edit_->text().toStdString();
     s.outro_path           = outro_edit_->text().toStdString();
+    s.output_resolution    = resolution_combo_->currentData().toString().toStdString();
+    s.output_format        = format_combo_->currentData().toString().toStdString();
     return s;
 }
 
@@ -124,6 +260,19 @@ void AutoEditDock::set_settings(const PluginSettings &s)
     any_missing |= apply_path(output_dir_edit_, s.output_dir);
     any_missing |= apply_path(intro_edit_,      s.intro_path);
     any_missing |= apply_path(outro_edit_,      s.outro_path);
+
+    for (int i = 0; i < resolution_combo_->count(); ++i) {
+        if (resolution_combo_->itemData(i).toString().toStdString() == s.output_resolution) {
+            resolution_combo_->setCurrentIndex(i);
+            break;
+        }
+    }
+    for (int i = 0; i < format_combo_->count(); ++i) {
+        if (format_combo_->itemData(i).toString().toStdString() == s.output_format) {
+            format_combo_->setCurrentIndex(i);
+            break;
+        }
+    }
 
     if (any_missing)
         emit settings_changed(get_settings());
@@ -182,6 +331,7 @@ void AutoEditDock::on_poll_timer()
             while (std::getline(dlog, line))
                 obs_log(LOG_INFO, "[rizzytos-worker] %s", line.c_str());
         }
+        emit processing_finished();
         return;
     }
 
@@ -198,6 +348,7 @@ void AutoEditDock::on_poll_timer()
     if (last_progress_change_.secsTo(QDateTime::currentDateTime()) > 30) {
         stop_progress();
         status_label_->setText(obs_module_text("RizzyTos.Status.Stale"));
+        emit processing_finished();
         return;
     }
 
@@ -206,6 +357,7 @@ void AutoEditDock::on_poll_timer()
         QString done = QString(obs_module_text("RizzyTos.Status.Done"))
                      + " " + QString::fromStdString(output_path_);
         status_label_->setText(done);
+        emit processing_finished();
     }
 }
 
@@ -245,6 +397,59 @@ void AutoEditDock::browse_outro()
         outro_edit_->setText(f);
         emit settings_changed(get_settings());
     }
+}
+
+// ── YouTube methods ───────────────────────────────────────────────────────────
+
+YouTubeSettings AutoEditDock::get_youtube_settings() const
+{
+    YouTubeSettings ys;
+    ys.upload_enabled = yt_upload_check_ && yt_upload_check_->isChecked();
+    ys.privacy        = (yt_public_radio_ && yt_public_radio_->isChecked())
+                        ? "public" : "private";
+    ys.title          = yt_title_edit_
+                        ? yt_title_edit_->text().toStdString() : "";
+    ys.description    = yt_desc_edit_
+                        ? yt_desc_edit_->toPlainText().toStdString() : "";
+    return ys;
+}
+
+void AutoEditDock::set_youtube_settings(const YouTubeSettings &ys)
+{
+    if (yt_upload_check_) yt_upload_check_->setChecked(ys.upload_enabled);
+    if (yt_private_radio_ && yt_public_radio_) {
+        if (ys.privacy == "public")
+            yt_public_radio_->setChecked(true);
+        else
+            yt_private_radio_->setChecked(true);
+    }
+    if (yt_title_edit_)
+        yt_title_edit_->setText(QString::fromStdString(ys.title));
+    if (yt_desc_edit_ && !ys.description.empty())
+        yt_desc_edit_->setPlainText(QString::fromStdString(ys.description));
+}
+
+void AutoEditDock::set_youtube_authenticated(bool authenticated)
+{
+    if (yt_connect_btn_) yt_connect_btn_->setVisible(!authenticated);
+    if (yt_controls_)    yt_controls_->setVisible(authenticated);
+}
+
+void AutoEditDock::set_youtube_upload_progress(int percent)
+{
+    if (!yt_progress_bar_) return;
+    yt_progress_bar_->setValue(percent);
+    yt_progress_bar_->show();
+}
+
+void AutoEditDock::set_youtube_upload_status(const QString &text)
+{
+    if (yt_status_label_) yt_status_label_->setText(text);
+}
+
+void AutoEditDock::on_youtube_upload_toggled(bool /*checked*/)
+{
+    emit youtube_settings_changed(get_youtube_settings());
 }
 
 // ── Button injection ──────────────────────────────────────────────────────────

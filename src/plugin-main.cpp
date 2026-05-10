@@ -27,19 +27,24 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "plugin-recorder.h"
 #include "plugin-launcher.h"
 #include "plugin-ui.h"
+#include "youtube-auth.h"
+#include "youtube-uploader.h"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 
 // ── Module-level state ────────────────────────────────────────────────────────
 
-static PluginSettings g_settings;
-static PluginLauncher g_launcher;
-static bool           g_our_recording_active = false;
-static char           g_config_path[2048]    = {};
+static PluginSettings  g_settings;
+static YouTubeSettings g_yt_settings;
+static PluginLauncher  g_launcher;
+static bool            g_our_recording_active = false;
+static char            g_config_path[2048]    = {};
 
-static QPointer<AutoEditDock> g_dock;
-static QPointer<QPushButton>  g_button;
+static QPointer<AutoEditDock>    g_dock;
+static QPointer<QPushButton>     g_button;
+static QPointer<YouTubeAuth>     g_yt_auth;
+static std::string               g_pending_upload_path;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -65,6 +70,64 @@ static void set_button_processing()
 {
     if (g_button) g_button->setEnabled(false);
     if (g_dock) g_dock->set_action_button_state(false, false);
+}
+
+static void start_youtube_upload(const std::string &video_path)
+{
+    if (!g_dock || !g_yt_auth) return;
+
+    auto *uploader = new YouTubeUploader(g_dock);
+    uploader->set_access_token(g_yt_auth->access_token());
+
+    QObject::connect(uploader, &YouTubeUploader::progress,
+                     g_dock, &AutoEditDock::set_youtube_upload_progress);
+    QObject::connect(uploader, &YouTubeUploader::status_changed,
+                     g_dock, &AutoEditDock::set_youtube_upload_status);
+    QObject::connect(uploader, &YouTubeUploader::completed,
+                     [](const QString &url) {
+                         obs_log(LOG_INFO, "YouTube upload completed: %s",
+                                 url.toUtf8().constData());
+                     });
+    QObject::connect(uploader, &YouTubeUploader::completed,
+                     uploader, &QObject::deleteLater);
+    QObject::connect(uploader, &YouTubeUploader::failed,
+                     [](const QString &reason) {
+                         obs_log(LOG_WARNING, "YouTube upload failed: %s",
+                                 reason.toUtf8().constData());
+                     });
+    QObject::connect(uploader, &YouTubeUploader::failed,
+                     uploader, &QObject::deleteLater);
+
+    // Token expired mid-upload: refresh and retry
+    QObject::connect(uploader, &YouTubeUploader::token_expired,
+                     [uploader]() {
+                         if (g_yt_auth) {
+                             QObject::connect(g_yt_auth, &YouTubeAuth::token_refreshed,
+                                              uploader, [uploader](const QString &token) {
+                                                  uploader->set_access_token(token);
+                                                  uploader->retry();
+                                              }, Qt::SingleShotConnection);
+                             g_yt_auth->refresh_access_token();
+                         }
+                     });
+
+    uploader->start(QString::fromStdString(video_path), g_yt_settings);
+}
+
+static void on_processing_finished()
+{
+    set_button_idle();
+    if (g_yt_settings.upload_enabled && !g_pending_upload_path.empty()) {
+        if (!g_yt_auth || !g_yt_auth->is_authenticated()) {
+            obs_log(LOG_WARNING,
+                    "YouTube upload requested but not authenticated — skipping.");
+            g_pending_upload_path.clear();
+            return;
+        }
+        std::string path = g_pending_upload_path;
+        g_pending_upload_path.clear();
+        start_youtube_upload(path);
+    }
 }
 
 static void on_button_clicked()
@@ -97,6 +160,7 @@ static void trigger_auto_edit()
         return;
     }
 
+    g_pending_upload_path = g_launcher.output_path();
     set_button_processing();
 
     if (g_dock)
@@ -108,6 +172,12 @@ static void on_dock_settings_changed(const PluginSettings &s)
 {
     g_settings = s;
     settings_save(g_settings, g_config_path);
+}
+
+static void on_dock_youtube_settings_changed(const YouTubeSettings &ys)
+{
+    g_yt_settings = ys;
+    youtube_settings_save(g_yt_settings, g_config_path);
 }
 
 // ── OBS event callback ────────────────────────────────────────────────────────
@@ -130,7 +200,31 @@ static void obs_event_cb(enum obs_frontend_event event, void * /*private_data*/)
                          on_dock_settings_changed);
         QObject::connect(g_dock, &AutoEditDock::record_requested,
                          on_button_clicked);
+        QObject::connect(g_dock, &AutoEditDock::processing_finished,
+                         on_processing_finished);
+        QObject::connect(g_dock, &AutoEditDock::youtube_settings_changed,
+                         on_dock_youtube_settings_changed);
         g_dock->set_settings(g_settings);
+        g_dock->set_youtube_settings(g_yt_settings);
+
+        // YouTube auth
+        g_yt_auth = new YouTubeAuth(dock_widget);
+        bool authenticated = g_yt_auth->is_authenticated();
+        g_dock->set_youtube_authenticated(authenticated);
+
+        QObject::connect(g_dock, &AutoEditDock::youtube_connect_requested,
+                         g_yt_auth, &YouTubeAuth::start_auth_flow);
+
+        QObject::connect(g_yt_auth, &YouTubeAuth::authenticated,
+                         [](const QString &) {
+                             if (g_dock) g_dock->set_youtube_authenticated(true);
+                         });
+        QObject::connect(g_yt_auth, &YouTubeAuth::auth_failed,
+                         [](const QString &reason) {
+                             obs_log(LOG_WARNING, "YouTube auth failed: %s",
+                                     reason.toUtf8().constData());
+                             if (g_dock) g_dock->set_youtube_authenticated(false);
+                         });
 
         obs_frontend_add_dock_by_id("rizzytos_auto_edit_dock",
                                     obs_module_text("RizzyTos.Dock.Title"),
@@ -164,7 +258,8 @@ bool obs_module_load(void)
         bfree(conf_dir);
     }
 
-    g_settings = settings_load(g_config_path);
+    g_settings    = settings_load(g_config_path);
+    g_yt_settings = youtube_settings_load(g_config_path);
 
     obs_frontend_add_event_callback(obs_event_cb, nullptr);
     return true;
